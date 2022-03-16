@@ -18,18 +18,30 @@
 #include "lib/tcpip/tcpsocket.h"
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
+#include "dsmr.h"
+#include "lib/rtos/task.h"
+#include "lib/rtos/stream.h"
+#include "lib/rtos/timer.h"
+#include "lib/tcpip/tcpsocket.h"
 
 
 #define SSID			"vanBassum"
 #define PSWD			"pedaalemmerzak"
 
-#define SD_CS  			GPIO_NUM_25
-#define SD_SCLK			GPIO_NUM_14 
-#define SD_MOSI			GPIO_NUM_13 
-#define SD_MISO			GPIO_NUM_4
+#define SD_CS  				GPIO_NUM_25
+#define SD_SCLK				GPIO_NUM_14 
+#define SD_MOSI				GPIO_NUM_13 
+#define SD_MISO				GPIO_NUM_4
+#define ECHO_UART_PORT_NUM	UART_NUM_2
+#define ECHO_TEST_TXD		GPIO_NUM_33
+#define ECHO_TEST_RXD		GPIO_NUM_35
+#define DATA_REQ			GPIO_NUM_2
 
 
 #define SD_MOUNT_POINT	"/sdcard"
+
+FreeRTOS::Task readDataTask;
+FreeRTOS::Timer dataRequestTimer;
 
 
 extern "C" {
@@ -69,6 +81,7 @@ void StartWIFI()
 
 
 
+
 void SDInit()
 {
 	esp_err_t ret;
@@ -94,7 +107,7 @@ void SDInit()
 	//host.max_freq_khz = SDMMC_FREQ_PROBING;
 	
 	//host.flags = SDMMC_HOST_FLAG_SPI | SDMMC_HOST_FLAG_DEINIT_ARG | SDMMC_HOST_FLAG_1BIT;
-	host.max_freq_khz = 1000;
+	host.max_freq_khz = 10000;
 	
 	spi_bus_config_t bus_cfg = {
 		.mosi_io_num = SD_MOSI,
@@ -137,6 +150,7 @@ void SDInit()
 	// Card has been initialized, print its properties
 	sdmmc_card_print_info(stdout, card);
 
+
 	
 }
 
@@ -146,6 +160,82 @@ void SDInit()
 
 
 
+
+void RequestData(FreeRTOS::Timer* timer)
+{
+	//OOPS cant delay here, i think at least
+	ESP_LOGI("RequestData", "Start request data");
+	gpio_set_level(DATA_REQ, 0);
+	
+}
+
+void ReadData(FreeRTOS::Task* task, void* args)
+{
+	uart_config_t uart_config = {
+		.baud_rate = 9600,
+		.data_bits = UART_DATA_7_BITS,
+		.parity = UART_PARITY_DISABLE,
+		.stop_bits = UART_STOP_BITS_1,
+		.flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+		.source_clk = UART_SCLK_APB,
+	};
+	size_t rxBufSize = 1024 * 8;
+	uint8_t rxData[rxBufSize];
+	gpio_set_pull_mode(ECHO_TEST_RXD, GPIO_PULLUP_ONLY);
+	ESP_ERROR_CHECK(uart_driver_install(ECHO_UART_PORT_NUM, rxBufSize * 2, 0, 0, NULL, 0));
+	ESP_ERROR_CHECK(uart_param_config(ECHO_UART_PORT_NUM, &uart_config));
+	ESP_ERROR_CHECK(uart_set_pin(ECHO_UART_PORT_NUM, ECHO_TEST_TXD, ECHO_TEST_RXD, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+
+	while (true)
+	{
+		const int len = uart_read_bytes(ECHO_UART_PORT_NUM, rxData, rxBufSize - 1, 1000 / portTICK_PERIOD_MS);
+		gpio_set_level(DATA_REQ, 1);
+		if (len > 0)
+		{
+			rxData[len] = 0;
+
+			ESP_LOGI("main", "Received %d bytes", len);
+			
+			DSMR::Measurement meas;
+			meas.TimeStamp = DateTime::Now();
+			std::string raw((char*)rxData);
+			DSMR::Parser p;
+			ESP_LOGI("main", "Try parse");
+			p.Parse(raw, meas);
+			ESP_LOGI("main", "PARSE RESULT: \n %s", meas.ToString().c_str());
+			
+			
+			
+			
+			cJSON* json = meas.ToJSON();
+
+			
+			//Send the sample
+			char* jsonStr = cJSON_PrintUnformatted(json);
+			int len = strlen(jsonStr);
+			
+			
+			
+			const char *file_hello = SD_MOUNT_POINT"/log.txt";
+
+			ESP_LOGI("SDInit", "Opening file %s", file_hello);
+			FILE *f = fopen(file_hello, "a");
+			if (f == NULL) {
+				ESP_LOGE("SDInit", "Failed to open file for writing");
+				return;
+			}
+			fprintf(f, "%s\n", jsonStr);
+			fclose(f);
+			ESP_LOGI("SDInit", "File written");
+			
+			
+			cJSON_free(jsonStr);
+			free(json);				
+			
+			
+		}		
+	}
+}
 
 
 
@@ -159,4 +249,13 @@ void app_main(void)
 	nvs_flash_init();
 	StartWIFI();
 	SDInit();
+	
+	readDataTask.SetCallback(ReadData);
+	readDataTask.Run("Read data task", 10, 1024 * 16, NULL);
+	
+	dataRequestTimer.Init("Data request timer", 100000 / portTICK_PERIOD_MS, true);
+	dataRequestTimer.SetCallback(RequestData);
+	dataRequestTimer.Start();
+	
+
 }
