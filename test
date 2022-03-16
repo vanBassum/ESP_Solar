@@ -43,16 +43,38 @@ struct DSMR
 struct DSMR_Parser
 {
 
-    static int ParseTotalConsumption1(DSMR& dsmr, std::string& raw, int pos)
+    static int ParseFloat(std::string& raw, int pos, float* val)
     {
         size_t start = raw.find('(', pos) + 1;
         if (start >= 0)
         {
-            dsmr.TotalConsumption1 = std::stof(&raw[start], &start);
+            *val = std::stof(&raw[start], &start);
             return start;
         }
         return 0;
     }
+
+    static int ParseTotalConsumption1(DSMR& dsmr, std::string& raw, int pos)
+    {
+        return ParseFloat(raw, pos, &dsmr.TotalConsumption1);
+    }
+
+    static int ParseTotalConsumption2(DSMR& dsmr, std::string& raw, int pos)
+    {
+        return ParseFloat(raw, pos, &dsmr.TotalConsumption2);
+    }
+
+    static int ParseTotalProduction1(DSMR& dsmr, std::string& raw, int pos)
+    {
+        return ParseFloat(raw, pos, &dsmr.TotalProduction1);
+    }
+
+    static int ParseTotalProduction2(DSMR& dsmr, std::string& raw, int pos)
+    {
+        return ParseFloat(raw, pos, &dsmr.TotalProduction2);
+    }
+
+
 
     struct DSMR_ValueParser
     {
@@ -61,7 +83,10 @@ struct DSMR_Parser
     };
 
     const std::vector<DSMR_ValueParser> valueParsers{
-          {"1-0:1.8.1", ParseTotalConsumption1}
+          {"1-0:1.8.1", ParseTotalConsumption1},
+          {"1-0:1.8.2", ParseTotalConsumption2},
+          {"1-0:2.8.1", ParseTotalProduction1},
+          {"1-0:2.8.1", ParseTotalProduction2},
     };
 
 
