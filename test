@@ -29,6 +29,14 @@ const char* capture =
 struct DSMR
 {
     float TotalConsumption1;
+    float TotalConsumption2;
+    float TotalProduction1;
+    float TotalProduction2;
+    float ActualConsumption;
+    float ActualProduction;
+    float TotalGasConsumption;
+    uint32_t ActualTarrif;
+
 };
 
 
