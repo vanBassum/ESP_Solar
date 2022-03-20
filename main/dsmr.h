@@ -193,7 +193,9 @@ namespace DSMR
 				}
 				if (!parsed)
 				{
-					ptr = raw.find('\n', ptr) + 1;
+					ptr = raw.find('\n', ptr);
+					if (ptr >= 0)
+						ptr++;
 				}
 			}
 		}

@@ -23,7 +23,11 @@
 #include "lib/rtos/stream.h"
 #include "lib/rtos/timer.h"
 #include "lib/tcpip/tcpsocket.h"
+#include "esp_heap_caps.h"
+#include "esp_heap_trace.h"
 
+#define NUM_RECORDS 100
+static heap_trace_record_t trace_record[NUM_RECORDS]; // This buffer must be in internal RAM
 
 #define SSID			"vanBassum"
 #define PSWD			"pedaalemmerzak"
@@ -41,7 +45,9 @@
 #define SD_MOUNT_POINT	"/sdcard"
 
 FreeRTOS::Task readDataTask;
-FreeRTOS::Timer dataRequestTimer;
+FreeRTOS::Task sendDataTask;
+FreeRTOS::Queue<DSMR::Measurement*> measurementQueue(20);
+
 
 
 extern "C" {
@@ -69,8 +75,7 @@ void StartWIFI()
 	ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
 	ESP_ERROR_CHECK(esp_wifi_start());
 	ESP_ERROR_CHECK(esp_wifi_connect());
-
-	setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
+	setenv("TZ", "UTC-1UTC,M3.5.0,M10.5.0/3", 1);
 	tzset();
 	sntp_setoperatingmode(SNTP_OPMODE_POLL);
 	sntp_setservername(0, "pool.ntp.org");
@@ -78,8 +83,13 @@ void StartWIFI()
 }
 
 
-
-
+uint32_t prevHeap = 0;
+void HeapTest(const char* msg)
+{
+	uint32_t heap = esp_get_free_heap_size();
+	ESP_LOGI("HeapTest", "Heap %d (%d)         %s", heap, prevHeap - heap, msg);
+	prevHeap = heap;
+}
 
 
 void SDInit()
@@ -156,19 +166,6 @@ void SDInit()
 
 
 
-
-
-
-
-
-void RequestData(FreeRTOS::Timer* timer)
-{
-	//OOPS cant delay here, i think at least
-	ESP_LOGI("RequestData", "Start request data");
-	gpio_set_level(DATA_REQ, 0);
-	
-}
-
 void ReadData(FreeRTOS::Task* task, void* args)
 {
 	uart_config_t uart_config = {
@@ -180,68 +177,80 @@ void ReadData(FreeRTOS::Task* task, void* args)
 		.source_clk = UART_SCLK_APB,
 	};
 	size_t rxBufSize = 1024 * 8;
-	uint8_t rxData[rxBufSize];
+	uint8_t* rxData = (uint8_t*) malloc(rxBufSize);
 	gpio_set_pull_mode(ECHO_TEST_RXD, GPIO_PULLUP_ONLY);
 	ESP_ERROR_CHECK(uart_driver_install(ECHO_UART_PORT_NUM, rxBufSize * 2, 0, 0, NULL, 0));
 	ESP_ERROR_CHECK(uart_param_config(ECHO_UART_PORT_NUM, &uart_config));
 	ESP_ERROR_CHECK(uart_set_pin(ECHO_UART_PORT_NUM, ECHO_TEST_TXD, ECHO_TEST_RXD, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
+	gpio_set_level(DATA_REQ, 0);
+	DSMR::Parser parser;
+	
 	while (true)
 	{
 		const int len = uart_read_bytes(ECHO_UART_PORT_NUM, rxData, rxBufSize - 1, 1000 / portTICK_PERIOD_MS);
-		gpio_set_level(DATA_REQ, 1);
+		
 		if (len > 0)
 		{
 			rxData[len] = 0;
-
-			ESP_LOGI("main", "Received %d bytes", len);
+			DSMR::Measurement* meas = new DSMR::Measurement();
 			
-			DSMR::Measurement meas;
-			meas.TimeStamp = DateTime::Now();
-			std::string raw((char*)rxData);
-			DSMR::Parser p;
-			ESP_LOGI("main", "Try parse");
-			p.Parse(raw, meas);
-			ESP_LOGI("main", "PARSE RESULT: \n %s", meas.ToString().c_str());
-			
-			
-			
-			
-			cJSON* json = meas.ToJSON();
-
-			
-			//Send the sample
-			char* jsonStr = cJSON_PrintUnformatted(json);
-			int len = strlen(jsonStr);
-			
-			
-			
-			const char *file_hello = SD_MOUNT_POINT"/log.txt";
-
-			ESP_LOGI("SDInit", "Opening file %s", file_hello);
-			FILE *f = fopen(file_hello, "a");
-			if (f == NULL) {
-				ESP_LOGE("SDInit", "Failed to open file for writing");
-				return;
+			if (meas != NULL)
+			{
+				meas->TimeStamp = DateTime::Now();
+				std::string raw((char*)rxData);
+				parser.Parse(raw, *meas);	
+				if (!measurementQueue.Enqueue(&meas, 1000 / portTICK_PERIOD_MS))
+				{
+					ESP_LOGE("ReadData", "Queue full, data discarded");
+					delete meas;
+				}			
 			}
-			fprintf(f, "%s\n", jsonStr);
-			fclose(f);
-			ESP_LOGI("SDInit", "File written");
-			
-			
-			cJSON_free(jsonStr);
-			free(json);				
-			
-			
 		}		
 	}
+	free(rxData);
 }
 
 
-
-
-
-
+void SendData(FreeRTOS::Task* task, void* args)
+{
+	//ESP_ERROR_CHECK(heap_trace_init_standalone(trace_record, NUM_RECORDS));
+	TCPSocket socket;	
+	while (true)
+	{
+		DSMR::Measurement* meas = NULL;
+		if (measurementQueue.Dequeue(&meas, 10000 / portTICK_PERIOD_MS))
+		{
+			if (socket.Connect("192.168.11.50", 1000, false, 5000))
+			{
+				//ESP_ERROR_CHECK(heap_trace_start(HEAP_TRACE_LEAKS));
+				//Convert to JSON
+				cJSON* command = cJSON_CreateObject();
+				cJSON_AddNumberToObject(command, "CMD", 0x02);
+				cJSON_AddItemToObject(command, "Data", meas->ToJSON());
+				//Send the sample
+				char* json = cJSON_PrintUnformatted(command);
+				ESP_LOGI("sendsample", "Send!!! %s", json);
+				int len = strlen(json);
+				socket.Send((uint8_t*)json, len);
+				free(json);		
+				cJSON_Delete(command);
+				delete meas;
+			}
+			else
+			{
+				if (!measurementQueue.Enqueue(&meas, 1000 / portTICK_PERIOD_MS))
+				{
+					ESP_LOGE("SendData", "Queue full, data discarded");
+					delete meas;
+				}
+				
+			}
+			
+		}
+		HeapTest("B1");
+	}
+}
 
 
 void app_main(void)
@@ -250,12 +259,15 @@ void app_main(void)
 	StartWIFI();
 	SDInit();
 	
+	
+	
+		
 	readDataTask.SetCallback(ReadData);
-	readDataTask.Run("Read data task", 10, 1024 * 16, NULL);
+	readDataTask.Run("Read data task", 10, 1024 * 4, NULL);
 	
-	dataRequestTimer.Init("Data request timer", 100000 / portTICK_PERIOD_MS, true);
-	dataRequestTimer.SetCallback(RequestData);
-	dataRequestTimer.Start();
+	sendDataTask.SetCallback(SendData);
+	sendDataTask.Run("Send data task", 10, 1024 * 8, NULL);
 	
-
+	while (1)
+		vTaskDelay(1000/ portTICK_PERIOD_MS);
 }
