@@ -185,11 +185,11 @@ void ReadData(FreeRTOS::Task* task, void* args)
 
 	gpio_set_level(DATA_REQ, 0);
 	DSMR::Parser parser;
-	
+	DateTime validTime = DateTime("2022-01-01T01:00:00Z"); 
 	while (true)
 	{
 		const int len = uart_read_bytes(ECHO_UART_PORT_NUM, rxData, rxBufSize - 1, 1000 / portTICK_PERIOD_MS);
-		
+		ESP_LOGI("ReadData", "Tick");
 		if (len > 0)
 		{
 			rxData[len] = 0;
@@ -199,12 +199,16 @@ void ReadData(FreeRTOS::Task* task, void* args)
 			{
 				meas->TimeStamp = DateTime::Now();
 				std::string raw((char*)rxData);
-				parser.Parse(raw, *meas);	
-				if (!measurementQueue.Enqueue(&meas, 1000 / portTICK_PERIOD_MS))
+				if (parser.Parse(raw, *meas) && meas->TimeStamp > validTime)
 				{
-					ESP_LOGE("ReadData", "Queue full, data discarded");
+					if (!measurementQueue.Enqueue(&meas, 1000 / portTICK_PERIOD_MS))
+					{
+						ESP_LOGE("ReadData", "Queue full, data discarded");
+						delete meas;
+					}	
+				}	
+				else
 					delete meas;
-				}			
 			}
 		}		
 	}

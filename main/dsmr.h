@@ -171,33 +171,41 @@ namespace DSMR
 		};
 
 
-		void Parse(std::string& raw, Measurement& dsmr)
+		bool Parse(std::string& raw, Measurement& dsmr)
 		{
 			int ptr = 0;
-			int len = raw.size();
 			int pcnt = valueParsers.size();
-
-			while (ptr < len && ptr >= 0)
+			int start = raw.find('/', ptr);
+			int end = raw.find('!', start);
+						
+			if (start < end)
 			{
-				bool parsed = false;
-				for (int i = 0; i < pcnt; i++)
+				ptr = start;
+				while (ptr < end)
 				{
-					if (raw.rfind(valueParsers[i].key, ptr) == ptr) {
-						int consumed = valueParsers[i].Parse(dsmr, raw, ptr);
-						if (consumed > 0)
-						{
-							ptr = consumed + 1;
-							parsed = true;
+					bool parsed = false;
+					for (int i = 0; i < pcnt; i++)
+					{
+						if (raw.rfind(valueParsers[i].key, ptr) == ptr) {
+							int consumed = valueParsers[i].Parse(dsmr, raw, ptr);
+							if (consumed > 0)
+							{
+								ptr = consumed + 1;
+								parsed = true;
+							}
 						}
 					}
+					if (!parsed)
+					{
+						ptr = raw.find('\n', ptr);
+						if (ptr >= 0)
+							ptr++;
+					}
 				}
-				if (!parsed)
-				{
-					ptr = raw.find('\n', ptr);
-					if (ptr >= 0)
-						ptr++;
-				}
+				return true;
 			}
+			
+			return false;
 		}
 	};
 }
