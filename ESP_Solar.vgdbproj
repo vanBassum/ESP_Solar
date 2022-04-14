@@ -7,7 +7,7 @@
     </CustomSourceDirectories>
     <AutoProgramSPIFFSPartition>true</AutoProgramSPIFFSPartition>
     <ProjectModeSettings>
-      <ProjectGUID>c59a71ec-bd97-4f93-acad-97a3a2113c25</ProjectGUID>
+      <ProjectGUID>2b2f1918-1a29-416d-90e1-f8899c491907</ProjectGUID>
       <GroupSourcesByTypes>true</GroupSourcesByTypes>
       <GroupSourcesByPaths>true</GroupSourcesByPaths>
       <HeaderScanMode>SourceDirs</HeaderScanMode>
@@ -60,7 +60,7 @@
       </ProjectItemSettings>
       <TargetSpecificSettings />
       <SetLDLibraryPathFromDependentArtifacts>true</SetLDLibraryPathFromDependentArtifacts>
-      <ProjectGUID>9efee2e4-37c0-4537-adfa-807ef36acc63</ProjectGUID>
+      <ProjectGUID>ab088c56-eca6-495c-b2a6-b1551a2ae5d1</ProjectGUID>
       <VirtualFolders />
       <ConfigurationNameCase>Upper</ConfigurationNameCase>
       <DefaultHeaderDiscoveryMode>HeaderDirectoryAndSubdirectories</DefaultHeaderDiscoveryMode>
@@ -159,9 +159,9 @@
     <DebugMethod>
       <ID>gdbstub</ID>
       <InterfaceID>com.sysprogs.espxx.bootloader</InterfaceID>
-      <InterfaceSerialNumber>020690B5</InterfaceSerialNumber>
+      <InterfaceSerialNumber>0001</InterfaceSerialNumber>
       <Configuration xsi:type="com.visualgdb.edp.espxx.settings.gdbstub.esp32">
-        <COMPort>COM3</COMPort>
+        <COMPort>COM30</COMPort>
         <StubBaudRate>74880</StubBaudRate>
         <BootloaderBaudRate>115200</BootloaderBaudRate>
         <BootloaderResetDelay>50</BootloaderResetDelay>

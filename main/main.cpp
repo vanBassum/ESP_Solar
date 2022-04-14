@@ -16,37 +16,16 @@
 #include "lib/rtos/stream.h"
 #include "lib/rtos/timer.h"
 #include "lib/tcpip/tcpsocket.h"
-#include "esp_vfs_fat.h"
-#include "sdmmc_cmd.h"
-#include "dsmr.h"
 #include "lib/rtos/task.h"
-#include "lib/rtos/stream.h"
-#include "lib/rtos/timer.h"
-#include "lib/tcpip/tcpsocket.h"
-#include "esp_heap_caps.h"
-#include "esp_heap_trace.h"
+#include "ina226.h"
+#include <driver/spi_master.h>
+#include "st7735.h"
+#include "fonts.h"
 
-#define NUM_RECORDS 100
-static heap_trace_record_t trace_record[NUM_RECORDS]; // This buffer must be in internal RAM
 
 #define SSID			"vanBassum"
 #define PSWD			"pedaalemmerzak"
 
-#define SD_CS  				GPIO_NUM_25
-#define SD_SCLK				GPIO_NUM_14 
-#define SD_MOSI				GPIO_NUM_13 
-#define SD_MISO				GPIO_NUM_4
-#define ECHO_UART_PORT_NUM	UART_NUM_2
-#define ECHO_TEST_TXD		GPIO_NUM_33
-#define ECHO_TEST_RXD		GPIO_NUM_35
-#define DATA_REQ			GPIO_NUM_2
-
-
-#define SD_MOUNT_POINT	"/sdcard"
-
-FreeRTOS::Task readDataTask;
-FreeRTOS::Task sendDataTask;
-FreeRTOS::Queue<DSMR::Measurement*> measurementQueue(20);
 
 
 
@@ -83,195 +62,131 @@ void StartWIFI()
 }
 
 
-uint32_t prevHeap = 0;
-void HeapTest(const char* msg)
-{
-	uint32_t heap = esp_get_free_heap_size();
-	ESP_LOGI("HeapTest", "Heap %d (%d)         %s", heap, prevHeap - heap, msg);
-	prevHeap = heap;
-}
+spi_device_handle_t handle;
 
-
-void SDInit()
+void spi_master_init()
 {
 	esp_err_t ret;
-	esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-		.format_if_mount_failed = false,
-		.max_files = 5,
-		.allocation_unit_size = 16 * 1024
-	};
-	
-	sdmmc_card_t *card;
-	const char mount_point[] = SD_MOUNT_POINT;
-	ESP_LOGI("SDInit", "Initializing SD card");
-	ESP_LOGI("SDInit", "Using SPI peripheral");
-	
-	
-	gpio_set_pull_mode(SD_MOSI, GPIO_PULLUP_ONLY);
-	gpio_set_pull_mode(SD_MISO, GPIO_PULLUP_ONLY); 
-	gpio_set_pull_mode(SD_SCLK, GPIO_PULLUP_ONLY); 
 
-	sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-	//host.slot = VSPI_HOST;
-	//host.flags = SDMMC_HOST_FLAG_1BIT;
-	//host.max_freq_khz = SDMMC_FREQ_PROBING;
+	gpio_pad_select_gpio(ST7735_CS_Pin);
+	gpio_set_direction(ST7735_CS_Pin, GPIO_MODE_OUTPUT);
+	gpio_set_level(ST7735_CS_Pin, 0);
+
+
+	gpio_pad_select_gpio(ST7735_DC_Pin);
+	gpio_set_direction(ST7735_DC_Pin, GPIO_MODE_OUTPUT);
+	gpio_set_level(ST7735_DC_Pin, 0);
+
 	
-	//host.flags = SDMMC_HOST_FLAG_SPI | SDMMC_HOST_FLAG_DEINIT_ARG | SDMMC_HOST_FLAG_1BIT;
-	host.max_freq_khz = 10000;
+	if (ST7735_RES_Pin >= 0) {
+		gpio_pad_select_gpio(ST7735_RES_Pin);
+		gpio_set_direction(ST7735_RES_Pin, GPIO_MODE_OUTPUT);
+		gpio_set_level(ST7735_RES_Pin, 0);
+		vTaskDelay(pdMS_TO_TICKS(100));
+		gpio_set_level(ST7735_RES_Pin, 1);
+	}
+
 	
-	spi_bus_config_t bus_cfg = {
-		.mosi_io_num = SD_MOSI,
-		.miso_io_num = SD_MISO,
-		.sclk_io_num = SD_SCLK,
+	spi_bus_config_t buscfg = {
+		.mosi_io_num = ST7735_SDA_Pin,
+		.miso_io_num = -1,
+		.sclk_io_num = ST7735_SCL_Pin,
 		.quadwp_io_num = -1,
-		.quadhd_io_num = -1,
-		.max_transfer_sz = 4000,
-		
+		.quadhd_io_num = -1
 	};
-	ret = spi_bus_initialize((spi_host_device_t) host.slot, &bus_cfg, SPI_DMA_CH_AUTO);
-	if (ret != ESP_OK) {
-		ESP_LOGE("SDInit", "Failed to initialize bus.");
-		return;
-	}
-	
-	sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-	slot_config.gpio_cs = SD_CS;
-	slot_config.host_id = (spi_host_device_t)host.slot;
-	
-	ESP_LOGI("SDInit", "Mounting filesystem");
-	ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card);
 
-	if (ret != ESP_OK) {
-		if (ret == ESP_FAIL) {
-			ESP_LOGE("SDInit",
-				"Failed to mount filesystem. "
-			         "If you want the card to be formatted, set the CONFIG_EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
-		}
-		else {
-			ESP_LOGE("SDInit",
-				"Failed to initialize the card (%s). "
-			         "Make sure SD card lines have pull-up resistors in place.",
-				esp_err_to_name(ret));
-		}
-		return;
-	}
-	ESP_LOGI("SDInit", "Filesystem mounted");
-	
-	// Card has been initialized, print its properties
-	sdmmc_card_print_info(stdout, card);
+	ret = spi_bus_initialize(HSPI_HOST, &buscfg, 1);
+	assert(ret == ESP_OK);
 
-
-	
-}
-
-
-
-void ReadData(FreeRTOS::Task* task, void* args)
-{
-	uart_config_t uart_config = {
-		.baud_rate = 9600,
-		.data_bits = UART_DATA_7_BITS,
-		.parity = UART_PARITY_DISABLE,
-		.stop_bits = UART_STOP_BITS_1,
-		.flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-		.source_clk = UART_SCLK_APB,
+	spi_device_interface_config_t devcfg =  {
+		.clock_speed_hz = 10000000,
+		.spics_io_num = ST7735_CS_Pin,
+		.flags = SPI_DEVICE_NO_DUMMY,
+		.queue_size = 7,
 	};
-	size_t rxBufSize = 1024 * 8;
-	uint8_t* rxData = (uint8_t*) malloc(rxBufSize);
-	gpio_set_pull_mode(ECHO_TEST_RXD, GPIO_PULLUP_ONLY);
-	ESP_ERROR_CHECK(uart_driver_install(ECHO_UART_PORT_NUM, rxBufSize * 2, 0, 0, NULL, 0));
-	ESP_ERROR_CHECK(uart_param_config(ECHO_UART_PORT_NUM, &uart_config));
-	ESP_ERROR_CHECK(uart_set_pin(ECHO_UART_PORT_NUM, ECHO_TEST_TXD, ECHO_TEST_RXD, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
-	gpio_set_level(DATA_REQ, 0);
-	DSMR::Parser parser;
-	DateTime validTime = DateTime("2022-01-01T01:00:00Z"); 
-	while (true)
-	{
-		const int len = uart_read_bytes(ECHO_UART_PORT_NUM, rxData, rxBufSize - 1, 1000 / portTICK_PERIOD_MS);
-		ESP_LOGI("ReadData", "Tick");
-		if (len > 0)
-		{
-			rxData[len] = 0;
-			DSMR::Measurement* meas = new DSMR::Measurement();
-			
-			if (meas != NULL)
-			{
-				meas->TimeStamp = DateTime::Now();
-				std::string raw((char*)rxData);
-				if (parser.Parse(raw, *meas) && meas->TimeStamp > validTime)
-				{
-					if (!measurementQueue.Enqueue(&meas, 1000 / portTICK_PERIOD_MS))
-					{
-						ESP_LOGE("ReadData", "Queue full, data discarded");
-						delete meas;
-					}	
-				}	
-				else
-					delete meas;
-			}
-		}		
-	}
-	free(rxData);
+	ret = spi_bus_add_device(HSPI_HOST, &devcfg, &handle);
+	assert(ret == ESP_OK);
+	//dev->_dc = GPIO_DC;
+	//dev->_bl = GPIO_BL;
+	//dev->_SPIHandle = handle;
 }
 
 
-void SendData(FreeRTOS::Task* task, void* args)
+void WrtPin(gpio_num_t pin, bool state)
 {
-	//ESP_ERROR_CHECK(heap_trace_init_standalone(trace_record, NUM_RECORDS));
-	TCPSocket socket;	
-	while (true)
-	{
-		DSMR::Measurement* meas = NULL;
-		if (measurementQueue.Dequeue(&meas, 10000 / portTICK_PERIOD_MS))
-		{
-			if (socket.Connect("192.168.11.50", 1000, false, 5000))
-			{
-				//ESP_ERROR_CHECK(heap_trace_start(HEAP_TRACE_LEAKS));
-				//Convert to JSON
-				cJSON* command = cJSON_CreateObject();
-				cJSON_AddNumberToObject(command, "CMD", 0x02);
-				cJSON_AddItemToObject(command, "Data", meas->ToJSON());
-				//Send the sample
-				char* json = cJSON_PrintUnformatted(command);
-				ESP_LOGI("sendsample", "Send!!! %s", json);
-				int len = strlen(json);
-				socket.Send((uint8_t*)json, len);
-				free(json);		
-				cJSON_Delete(command);
-				delete meas;
-			}
-			else
-			{
-				if (!measurementQueue.Enqueue(&meas, 1000 / portTICK_PERIOD_MS))
-				{
-					ESP_LOGE("SendData", "Queue full, data discarded");
-					delete meas;
-				}
-				
-			}
-			
-		}
-		HeapTest("B1");
-	}
+	gpio_set_level(pin, state);
 }
+
+void spi_master_write_byte(uint8_t* Data, size_t DataLength, int timeout)
+{
+	spi_transaction_t SPITransaction;
+	esp_err_t ret;
+
+	if (DataLength > 0) {
+		memset(&SPITransaction, 0, sizeof(spi_transaction_t));
+		SPITransaction.length = DataLength * 8;
+		SPITransaction.tx_buffer = Data;
+		ret = spi_device_transmit(handle, &SPITransaction);
+		assert(ret == ESP_OK); 
+	}
+
+	//return true;
+}
+
 
 
 void app_main(void)
 {
 	nvs_flash_init();
 	StartWIFI();
-	SDInit();
+	
+	spi_master_init();
+	SetWritePinCallback(WrtPin);
+	SetTransmitCallback(spi_master_write_byte);
 	
 	
-	
+
+	ST7735_Init();
+	ST7735_FillScreen(0x00);
 		
-	readDataTask.SetCallback(ReadData);
-	readDataTask.Run("Read data task", 10, 1024 * 4, NULL);
 	
-	sendDataTask.SetCallback(SendData);
-	sendDataTask.Run("Send data task", 10, 1024 * 8, NULL);
 	
-	while (1)
-		vTaskDelay(1000/ portTICK_PERIOD_MS);
+	INA226 inaBATT;
+	inaBATT.begin(0x40);
+	inaBATT.configure(INA226_AVERAGES_16, INA226_BUS_CONV_TIME_8244US, INA226_SHUNT_CONV_TIME_8244US, INA226_MODE_SHUNT_BUS_TRIG);
+	inaBATT.calibrate(0.005, 10);
+	INA226 inaPV;
+	inaPV.begin(0x41);
+	inaPV.configure(INA226_AVERAGES_16, INA226_BUS_CONV_TIME_8244US, INA226_SHUNT_CONV_TIME_8244US, INA226_MODE_SHUNT_BUS_TRIG);
+	inaPV.calibrate(0.005, 10);
+	
+	char buf[128];
+	
+	
+	while (true)
+	{
+		float uBat, iBat, pBat;
+		uBat = inaBATT.readBusVoltage();
+		iBat = inaBATT.readShuntVoltage() / 0.005;
+		pBat = iBat * uBat;
+		
+		float uPV, iPV, pPV;
+		uPV = inaPV.readBusVoltage();
+		iPV = inaPV.readShuntVoltage() / 0.005;
+		pPV = uPV * iPV;
+		
+		
+		
+		snprintf(buf, sizeof(buf), "U = %0.3fV", uBat);
+		ST7735_WriteString(0, 0, buf, Font_7x10, 0xFFFF, 0x0000);
+		
+		snprintf(buf, sizeof(buf), "I = %0.3fA", iBat);
+		ST7735_WriteString(0, 16, buf, Font_7x10, 0xFFFF, 0x0000);
+		
+		snprintf(buf, sizeof(buf), "P = %0.3fW", pBat);
+		ST7735_WriteString(0, 32, buf, Font_7x10, 0xFFFF, 0x0000);
+
+		vTaskDelay(1000 / portTICK_PERIOD_MS);
+	}	
 }

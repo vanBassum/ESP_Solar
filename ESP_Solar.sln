@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.32112.339
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{803FD0C6-D64E-4E16-9DC3-1DAEC859A3D2}") = "dsmr", "dsmr.vgdbproj", "{9EFEE2E4-37C0-4537-ADFA-807EF36ACC63}"
+Project("{803FD0C6-D64E-4E16-9DC3-1DAEC859A3D2}") = "ESP_Solar", "ESP_Solar.vgdbproj", "{AB088C56-ECA6-495C-B2A6-B1551A2AE5D1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,15 +11,15 @@ Global
 		Release|VisualGDB = Release|VisualGDB
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{9EFEE2E4-37C0-4537-ADFA-807EF36ACC63}.Debug|VisualGDB.ActiveCfg = Debug|VisualGDB
-		{9EFEE2E4-37C0-4537-ADFA-807EF36ACC63}.Debug|VisualGDB.Build.0 = Debug|VisualGDB
-		{9EFEE2E4-37C0-4537-ADFA-807EF36ACC63}.Release|VisualGDB.ActiveCfg = Release|VisualGDB
-		{9EFEE2E4-37C0-4537-ADFA-807EF36ACC63}.Release|VisualGDB.Build.0 = Release|VisualGDB
+		{AB088C56-ECA6-495C-B2A6-B1551A2AE5D1}.Debug|VisualGDB.ActiveCfg = Debug|VisualGDB
+		{AB088C56-ECA6-495C-B2A6-B1551A2AE5D1}.Debug|VisualGDB.Build.0 = Debug|VisualGDB
+		{AB088C56-ECA6-495C-B2A6-B1551A2AE5D1}.Release|VisualGDB.ActiveCfg = Release|VisualGDB
+		{AB088C56-ECA6-495C-B2A6-B1551A2AE5D1}.Release|VisualGDB.Build.0 = Release|VisualGDB
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {F96F26DD-9B0D-4F94-A174-ADE9B828AE9D}
+		SolutionGuid = {99A5E044-471F-4CAD-AC33-7F6D7EE74E48}
 	EndGlobalSection
 EndGlobal
