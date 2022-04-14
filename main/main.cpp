@@ -21,6 +21,7 @@
 #include <driver/spi_master.h>
 #include "st7735.h"
 #include "fonts.h"
+#include "esp_pm.h"
 
 
 #define SSID			"vanBassum"
@@ -99,7 +100,7 @@ void spi_master_init()
 	assert(ret == ESP_OK);
 
 	spi_device_interface_config_t devcfg =  {
-		.clock_speed_hz = 10000000,
+		.clock_speed_hz = 20000000,
 		.spics_io_num = ST7735_CS_Pin,
 		.flags = SPI_DEVICE_NO_DUMMY,
 		.queue_size = 7,
@@ -137,9 +138,9 @@ void spi_master_write_byte(uint8_t* Data, size_t DataLength, int timeout)
 
 
 void app_main(void)
-{
+{	
 	nvs_flash_init();
-	StartWIFI();
+	//StartWIFI();
 	
 	spi_master_init();
 	SetWritePinCallback(WrtPin);
@@ -163,7 +164,7 @@ void app_main(void)
 	
 	char buf[128];
 	
-	
+	TickType_t prev = xTaskGetTickCount();
 	while (true)
 	{
 		float uBat, iBat, pBat;
@@ -179,14 +180,19 @@ void app_main(void)
 		
 		
 		snprintf(buf, sizeof(buf), "U = %0.3fV", uBat);
-		ST7735_WriteString(0, 0, buf, Font_7x10, 0xFFFF, 0x0000);
+		ST7735_WriteString(0, 0, buf, Font_11x18, 0xFFFF, 0x0000);
 		
 		snprintf(buf, sizeof(buf), "I = %0.3fA", iBat);
-		ST7735_WriteString(0, 16, buf, Font_7x10, 0xFFFF, 0x0000);
+		ST7735_WriteString(0, 32, buf, Font_11x18, 0xFFFF, 0x0000);
 		
 		snprintf(buf, sizeof(buf), "P = %0.3fW", pBat);
-		ST7735_WriteString(0, 32, buf, Font_7x10, 0xFFFF, 0x0000);
+		ST7735_WriteString(0, 64, buf, Font_11x18, 0xFFFF, 0x0000);
 
-		vTaskDelay(1000 / portTICK_PERIOD_MS);
+		TickType_t now = xTaskGetTickCount();
+		int fps =  1000 / (portTICK_PERIOD_MS * (now - prev));
+		prev = now;
+		
+		snprintf(buf, sizeof(buf), "%d fps", fps);
+		ST7735_WriteString(0, 64+32, buf, Font_11x18, 0xFFFF, 0x0000);
 	}	
 }
