@@ -22,12 +22,14 @@
 #include "st7735.h"
 #include "fonts.h"
 #include "esp_pm.h"
+#include "ina3221.h"
 
 
 #define SSID			"vanBassum"
 #define PSWD			"pedaalemmerzak"
 
-
+#define SCL 			GPIO_NUM_22
+#define SDA				GPIO_NUM_21
 
 
 extern "C" {
@@ -62,6 +64,27 @@ void StartWIFI()
 	sntp_init();
 }
 
+static void i2c_master_init(int sda, int scl)
+{
+	static bool initialized = false;
+	if (!initialized)
+	{	
+		int i2c_master_port = 0;
+		i2c_config_t conf;
+		conf.mode = I2C_MODE_MASTER;
+		conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
+		conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
+		conf.master.clk_speed = 400000;
+		conf.sda_io_num = sda;
+		conf.scl_io_num = scl;
+		conf.clk_flags = 0;
+		i2c_param_config(i2c_master_port, &conf);
+		if (i2c_driver_install(i2c_master_port, conf.mode, 0, 0, 0) == ESP_OK)
+		{
+			initialized = true;
+		}
+	}
+}
 
 spi_device_handle_t handle;
 
@@ -145,54 +168,35 @@ void app_main(void)
 	spi_master_init();
 	SetWritePinCallback(WrtPin);
 	SetTransmitCallback(spi_master_write_byte);
-	
-	
 
 	ST7735_Init();
 	ST7735_FillScreen(0x00);
-		
-	
-	
-	INA226 inaBATT;
-	inaBATT.begin(0x40);
-	inaBATT.configure(INA226_AVERAGES_16, INA226_BUS_CONV_TIME_8244US, INA226_SHUNT_CONV_TIME_8244US, INA226_MODE_SHUNT_BUS_TRIG);
-	inaBATT.calibrate(0.005, 10);
-	INA226 inaPV;
-	inaPV.begin(0x41);
-	inaPV.configure(INA226_AVERAGES_16, INA226_BUS_CONV_TIME_8244US, INA226_SHUNT_CONV_TIME_8244US, INA226_MODE_SHUNT_BUS_TRIG);
-	inaPV.calibrate(0.005, 10);
-	
+
+	ST7735_WriteString(0, 0, "Hello", Font_11x18, 0xFFFF, 0x0000);
+
+	i2c_master_init(SDA, SCL);
+
+
+
+	INA3221 ina3221(INA3221_ADDR40_GND);
+	ina3221.begin();
+	ina3221.reset();
+	ina3221.setShuntRes(5, 5, 5);
+
 	char buf[128];
 	
 	TickType_t prev = xTaskGetTickCount();
 	while (true)
 	{
-		float uBat, iBat, pBat;
-		uBat = inaBATT.readBusVoltage();
-		iBat = inaBATT.readShuntVoltage() / 0.005;
-		pBat = iBat * uBat;
-		
-		float uPV, iPV, pPV;
-		uPV = inaPV.readBusVoltage();
-		iPV = inaPV.readShuntVoltage() / 0.005;
-		pPV = uPV * iPV;
-		
-		
-		
-		snprintf(buf, sizeof(buf), "U = %0.3fV", uBat);
-		ST7735_WriteString(0, 0, buf, Font_11x18, 0xFFFF, 0x0000);
-		
-		snprintf(buf, sizeof(buf), "I = %0.3fA", iBat);
-		ST7735_WriteString(0, 32, buf, Font_11x18, 0xFFFF, 0x0000);
-		
-		snprintf(buf, sizeof(buf), "P = %0.3fW", pBat);
-		ST7735_WriteString(0, 64, buf, Font_11x18, 0xFFFF, 0x0000);
+		float current[3], voltage[3];
+		current[0] = ina3221.getCurrent(INA3221_CH1);
+		voltage[0] = ina3221.getVoltage(INA3221_CH1);
+		current[1] = ina3221.getCurrent(INA3221_CH2);
+		voltage[1] = ina3221.getVoltage(INA3221_CH2);
+		current[2] = ina3221.getCurrent(INA3221_CH3);
+		voltage[2] = ina3221.getVoltage(INA3221_CH3);
 
-		TickType_t now = xTaskGetTickCount();
-		int fps =  1000 / (portTICK_PERIOD_MS * (now - prev));
-		prev = now;
-		
-		snprintf(buf, sizeof(buf), "%d fps", fps);
-		ST7735_WriteString(0, 64+32, buf, Font_11x18, 0xFFFF, 0x0000);
+		ESP_LOGI("MAIN", "%.2fV %.2fA   %.2fV %.2fA   %.2fV %.2fA", voltage[0], current[0], voltage[1], current[1], voltage[2], current[2]);
+		vTaskDelay(pdMS_TO_TICKS(250));
 	}	
 }

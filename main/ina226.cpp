@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <math.h>
 #include "esp_system.h"
+#include "driver/i2c.h"
 
 #define SCL 			GPIO_NUM_22
 #define SDA				GPIO_NUM_21
@@ -307,3 +308,5 @@ void INA226::writeRegister16(uint8_t reg, uint16_t value)
 	data[2] = value >> 8;
 	i2c_master_write_to_device(0, inaAddress, data, sizeof(data), 1000 / portTICK_PERIOD_MS);
 }
+
+

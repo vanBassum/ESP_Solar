@@ -1,0 +1,13 @@
+{
+    "idf.adapterTargetName": "esp32",
+    "idf.portWin": "COM2",
+    "idf.flashType": "UART",
+    "files.associations": {
+        "system_error": "cpp",
+        "type_traits": "cpp",
+        "xtr1common": "cpp",
+        "xutility": "cpp",
+        "vector": "cpp",
+        "xstring": "cpp"
+    }
+}
