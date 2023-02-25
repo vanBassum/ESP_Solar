@@ -10,3 +10,6 @@
 [submodule "components/ESP_Com"]
 	path = components/ESP_Com
 	url = https://github.com/vanBassum/ESP_Com.git
+[submodule "components/lvgl"]
+	path = components/lvgl
+	url = https://github.com/lvgl/lvgl.git
