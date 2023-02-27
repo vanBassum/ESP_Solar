@@ -4,7 +4,6 @@
 #include "esp_com.h"
 #include "esp_drivers.h"
 #include "esp_log.h"
-#include "st7735.h"
 #include "rom/gpio.h"
 
 
@@ -114,32 +113,39 @@ void app_main(void)
 	ST7735 st7735;
 
 	INIT_AND_CONTINUE(TAG, "Initializing NVS", ESP32::InitNVS());
-	INIT_AND_CONTINUE(TAG, "Initializing WIFI", ESP32::InitWIFI(SSID, PSWD));
-	INIT_AND_CONTINUE(TAG, "Initializing NTP", ESP32::InitNTP());
+	//INIT_AND_CONTINUE(TAG, "Initializing WIFI", ESP32::InitWIFI(SSID, PSWD));
+	//INIT_AND_CONTINUE(TAG, "Initializing NTP", ESP32::InitNTP());
 	INIT_AND_CONTINUE(TAG, "Initializing LVGL", LVGL::Init());
 
 
-	spi_master_init();
-	SetWritePinCallback(WrtPin);
-	SetTransmitCallback(spi_master_write_byte);
-
-	ST7735_Init();
-	ST7735_FillScreen(0x00);
-
-	ST7735_WriteString(0, 0, "Hello", Font_11x18, 0xFFFF, 0x0000);
+	//spi_master_init();
+	//SetWritePinCallback(WrtPin);
+	//SetTransmitCallback(spi_master_write_byte);
+	//ST7735_Init();
+	//ST7735_FillScreen(0x00);
+	//ST7735_WriteString(0, 0, "Hello", Font_11x18, 0xFFFF, 0x0000);
 	
-	//INIT_AND_CONTINUE(TAG, "Initializing SPI", spiBus.Init(HSPI_HOST, SPI_CLK_Pin, SPI_MOSI_Pin, SPI_MISO_Pin));
-//
-//
-	//st7735.settings.cs = DISPLAY_CS_Pin;
-	//st7735.settings.dc = DISPLAY_DC_Pin;
-	//st7735.settings.rst = DISPLAY_RES_Pin;
-	//st7735.Init(spiBus);
-//
-//
-//
-//
-	//for(int i=0; i<64; i++)
+	INIT_AND_CONTINUE(TAG, "Initializing SPI", spiBus.Init(HSPI_HOST, SPI_CLK_Pin, SPI_MOSI_Pin, SPI_MISO_Pin));
+	
+	st7735.settings.cs = DISPLAY_CS_Pin;
+	st7735.settings.dc = DISPLAY_DC_Pin;
+	st7735.settings.rst = DISPLAY_RES_Pin;
+	INIT_AND_CONTINUE(TAG, "Initializing st7735", st7735.Init(spiBus));
+	
+	DisplayST7735 display;
+	display.Init(&st7735);
+	
+	Screen screen;
+	screen.Init();
+	
+	Label label;
+	label.Init(screen);
+	
+	label.SetText("Test");
+	
+	
+	
+	//for(int i=0; i<128; i++)
 	//{
 	//	st7735.ST7735_DrawPixel(i, i, 0x0000);
 	//	st7735.ST7735_DrawPixel(128-i, i, 0xFFFF);
