@@ -49,17 +49,20 @@ void app_main(void)
 	INIT_AND_CONTINUE(TAG, "Initializing NVS", ESP32::InitNVS());
 	//INIT_AND_CONTINUE(TAG, "Initializing WIFI", ESP32::InitWIFI(SSID, PSWD));
 	//INIT_AND_CONTINUE(TAG, "Initializing NTP", ESP32::InitNTP());
+
+
+	INIT_AND_CONTINUE(TAG, "Initializing I2C", i2cBus.Init(I2C_NUM_0, I2C_SCL, I2C_SDA));
+	INIT_AND_CONTINUE(TAG, "Initializing ina3221", ina3221.Init(&i2cBus, INA3221_ADDR40_GND));
 	INIT_AND_CONTINUE(TAG, "Initializing LVGL", LVGL::Init());
 	INIT_AND_CONTINUE(TAG, "Initializing SPI", spiBus.Init(HSPI_HOST, SPI_CLK_Pin, SPI_MOSI_Pin, SPI_MISO_Pin, GPIO_NUM_NC, GPIO_NUM_NC, SPI_DMA_CH_AUTO));
 	INIT_AND_CONTINUE(TAG, "Initializing st7735", st7735.Init(spiBus));
-	INIT_AND_CONTINUE(TAG, "Initializing I2C", i2cBus.Init(I2C_NUM_0, I2C_SCL, I2C_SDA));
-	INIT_AND_CONTINUE(TAG, "Initializing ina3221", ina3221.Init(&i2cBus, INA3221_ADDR40_GND));
-
 	ina3221.setShuntRes(5, 5, 5);
+
 
 	DisplayST7735 display;
 	display.Init(&st7735);
-	
+
+
 	Screen screen;
 	screen.Init();
 
@@ -71,19 +74,22 @@ void app_main(void)
 		labels[i].SetPosition((i%2) * 64, (i/2) * 12);
 	}
 
+//
+
 	while (true)
 	{
 		float current[3], voltage[3];
-		current[0] = ina3221.getCurrent(INA3221_CH1);
-		voltage[0] = ina3221.getVoltage(INA3221_CH1);
-		current[1] = ina3221.getCurrent(INA3221_CH2);
-		voltage[1] = ina3221.getVoltage(INA3221_CH2);
-		current[2] = ina3221.getCurrent(INA3221_CH3);
-		voltage[2] = ina3221.getVoltage(INA3221_CH3);
+		current[0] = 0;//ina3221.getCurrent(INA3221_CH1);
+		voltage[0] = 0;//ina3221.getVoltage(INA3221_CH1);
+		current[1] = 0;//ina3221.getCurrent(INA3221_CH2);
+		voltage[1] = 0;//ina3221.getVoltage(INA3221_CH2);
+		current[2] = 0;//ina3221.getCurrent(INA3221_CH3);
+		voltage[2] = 0;//ina3221.getVoltage(INA3221_CH3);
 
-		ESP_LOGI("MAIN", "%.2fV %.2fA   %.2fV %.2fA   %.2fV %.2fA", voltage[0], current[0], voltage[1], current[1], voltage[2], current[2]);
+		//ESP_LOGI("MAIN", "%.2fV %.2fA   %.2fV %.2fA   %.2fV %.2fA", voltage[0], current[0], voltage[1], current[1], voltage[2], current[2]);
 		vTaskDelay(pdMS_TO_TICKS(250));
 	}	
+
 
 	while(1)
 	{
