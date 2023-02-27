@@ -58,6 +58,21 @@ void app_main(void)
 	INIT_AND_CONTINUE(TAG, "Initializing st7735", st7735.Init(spiBus));
 	ina3221.setShuntRes(5, 5, 5);
 
+	for(int i=0; i<10; i++)
+	{
+		float current[3], voltage[3];
+		current[0] = ina3221.getCurrent(INA3221_CH1);
+		voltage[0] = ina3221.getVoltage(INA3221_CH1);
+		current[1] = ina3221.getCurrent(INA3221_CH2);
+		voltage[1] = ina3221.getVoltage(INA3221_CH2);
+		current[2] = ina3221.getCurrent(INA3221_CH3);
+		voltage[2] = ina3221.getVoltage(INA3221_CH3);
+
+		ESP_LOGI("MAIN", "%.2fV %.2fA   %.2fV %.2fA   %.2fV %.2fA", voltage[0], current[0], voltage[1], current[1], voltage[2], current[2]);
+		vTaskDelay(pdMS_TO_TICKS(250));
+	}
+
+
 
 	DisplayST7735 display;
 	display.Init(&st7735);
@@ -74,23 +89,6 @@ void app_main(void)
 		labels[i].SetPosition((i%2) * 64, (i/2) * 12);
 	}
 
-//
-
-	while (true)
-	{
-		float current[3], voltage[3];
-		current[0] = 0;//ina3221.getCurrent(INA3221_CH1);
-		voltage[0] = 0;//ina3221.getVoltage(INA3221_CH1);
-		current[1] = 0;//ina3221.getCurrent(INA3221_CH2);
-		voltage[1] = 0;//ina3221.getVoltage(INA3221_CH2);
-		current[2] = 0;//ina3221.getCurrent(INA3221_CH3);
-		voltage[2] = 0;//ina3221.getVoltage(INA3221_CH3);
-
-		//ESP_LOGI("MAIN", "%.2fV %.2fA   %.2fV %.2fA   %.2fV %.2fA", voltage[0], current[0], voltage[1], current[1], voltage[2], current[2]);
-		vTaskDelay(pdMS_TO_TICKS(250));
-	}	
-
-
 	while(1)
 	{
 		float current[3], voltage[3];
@@ -101,28 +99,18 @@ void app_main(void)
 		current[2] = ina3221.getCurrent(INA3221_CH3);
 		voltage[2] = ina3221.getVoltage(INA3221_CH3);
 
+		//ESP_LOGI("MAIN", "%.2fV %.2fA   %.2fV %.2fA   %.2fV %.2fA", voltage[0], current[0], voltage[1], current[1], voltage[2], current[2]);
 
+		//ESP_LOGI("MAIN", "%fV", voltage[0]);
 
-		current[0] = 0.0f;
-        voltage[0] = 0.0f;
-        current[1] = 0.0f;
-        voltage[1] = 0.0f;
-        current[2] = 0.0f;
-        voltage[2] = 0.0f;
+		labels[0].SetText("%.2fV",voltage[0] );
+		labels[1].SetText("%.3fA",current[0] );
+		labels[2].SetText("%.2fV",voltage[1] );
+		labels[3].SetText("%.3fA",current[1] );
+		labels[4].SetText("%.2fV",voltage[2] );
+		labels[5].SetText("%.3fA",current[2] );
 
-
-		ESP_LOGI("MAIN", "%.2fV %.2fA   %.2fV %.2fA   %.2fV %.2fA", voltage[0], current[0], voltage[1], current[1], voltage[2], current[2]);
-
-		labels[0].SetText("%dmV", current[0]);
-		labels[1].SetText("%dmA", voltage[0]);
-		labels[2].SetText("%dmV", current[1]);
-		labels[3].SetText("%dmA", voltage[1]);
-		labels[4].SetText("%dmV", current[2]);
-		labels[5].SetText("%dmA", voltage[2]);
-
-
-
-		vTaskDelay(pdMS_TO_TICKS(20));
+		vTaskDelay(pdMS_TO_TICKS(50));
 	}
 
 }
