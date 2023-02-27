@@ -125,7 +125,7 @@ void app_main(void)
 	//ST7735_FillScreen(0x00);
 	//ST7735_WriteString(0, 0, "Hello", Font_11x18, 0xFFFF, 0x0000);
 	
-	INIT_AND_CONTINUE(TAG, "Initializing SPI", spiBus.Init(HSPI_HOST, SPI_CLK_Pin, SPI_MOSI_Pin, SPI_MISO_Pin));
+	INIT_AND_CONTINUE(TAG, "Initializing SPI", spiBus.Init(HSPI_HOST, SPI_CLK_Pin, SPI_MOSI_Pin, SPI_MISO_Pin, GPIO_NUM_NC, GPIO_NUM_NC, SPI_DMA_CH_AUTO));
 	
 	st7735.settings.cs = DISPLAY_CS_Pin;
 	st7735.settings.dc = DISPLAY_DC_Pin;
@@ -142,18 +142,34 @@ void app_main(void)
 	label.Init(screen);
 	
 	label.SetText("Test");
-	
-	
-	
-	//for(int i=0; i<128; i++)
-	//{
-	//	st7735.ST7735_DrawPixel(i, i, 0x0000);
-	//	st7735.ST7735_DrawPixel(128-i, i, 0xFFFF);
-	//}
 
+	int y = 0;
+	int x = 0;
+	int dx = 2;
+	int dy = 1;
+	
 	while(1)
 	{
-		vTaskDelay(pdMS_TO_TICKS(100));
+		x += dx;
+		y += dy;
+		
+		if (x > 128 || x < 0)
+		{
+			dx = -dx;
+			x += dx;
+		}
+		
+		if (y > 128 || y < 0)
+		{
+			dy = -dy;
+			y += dy;
+		}
+		
+		
+		label.SetPosition(x, y);
+		
+
+		vTaskDelay(pdMS_TO_TICKS(20));
 	}
 
 }
