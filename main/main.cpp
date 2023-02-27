@@ -35,139 +35,86 @@ extern "C" {
 }
 
 
-spi_device_handle_t handle;
-
-void spi_master_init()
-{
-	esp_err_t ret;
-
-	gpio_pad_select_gpio(DISPLAY_CS_Pin);
-	gpio_set_direction(DISPLAY_CS_Pin, GPIO_MODE_OUTPUT);
-	gpio_set_level(DISPLAY_CS_Pin, 0);
-
-
-	gpio_pad_select_gpio(DISPLAY_DC_Pin);
-	gpio_set_direction(DISPLAY_DC_Pin, GPIO_MODE_OUTPUT);
-	gpio_set_level(DISPLAY_DC_Pin, 0);
-
-	
-	if (DISPLAY_RES_Pin >= 0) {
-		//gpio_pad_select_gpio(DISPLAY_RES_Pin);
-		gpio_set_direction(DISPLAY_RES_Pin, GPIO_MODE_OUTPUT);
-		gpio_set_level(DISPLAY_RES_Pin, 0);
-		vTaskDelay(pdMS_TO_TICKS(100));
-		gpio_set_level(DISPLAY_RES_Pin, 1);
-	}
-
-	
-	spi_bus_config_t buscfg = {
-		.mosi_io_num = SPI_MOSI_Pin,
-		.miso_io_num = SPI_MISO_Pin,
-		.sclk_io_num = SPI_CLK_Pin,
-		.quadwp_io_num = -1,
-		.quadhd_io_num = -1
-	};
-
-	ret = spi_bus_initialize(HSPI_HOST, &buscfg, 1);
-	assert(ret == ESP_OK);
-
-	spi_device_interface_config_t devcfg =  {
-		.clock_speed_hz = 20000000,
-		.spics_io_num = DISPLAY_CS_Pin,
-		.flags = SPI_DEVICE_NO_DUMMY,
-		.queue_size = 7,
-	};
-
-	ret = spi_bus_add_device(HSPI_HOST, &devcfg, &handle);
-	assert(ret == ESP_OK);
-	//dev->_dc = GPIO_DC;
-	//dev->_bl = GPIO_BL;
-	//dev->_SPIHandle = handle;
-}
-
-
-void WrtPin(gpio_num_t pin, bool state)
-{
-	gpio_set_level(pin, state);
-}
-
-void spi_master_write_byte(uint8_t* Data, size_t DataLength, int timeout)
-{
-	spi_transaction_t SPITransaction;
-	esp_err_t ret;
-
-	if (DataLength > 0) {
-		memset(&SPITransaction, 0, sizeof(spi_transaction_t));
-		SPITransaction.length = DataLength * 8;
-		SPITransaction.tx_buffer = Data;
-		ret = spi_device_transmit(handle, &SPITransaction);
-		assert(ret == ESP_OK); 
-	}
-
-	//return true;
-}
-
 void app_main(void)
 {	
+	I2CBus i2cBus;
 	SPIBus spiBus;
 	ST7735 st7735;
+	INA3221 ina3221;
+
+	st7735.settings.cs = DISPLAY_CS_Pin;
+	st7735.settings.dc = DISPLAY_DC_Pin;
+	st7735.settings.rst = DISPLAY_RES_Pin;
 
 	INIT_AND_CONTINUE(TAG, "Initializing NVS", ESP32::InitNVS());
 	//INIT_AND_CONTINUE(TAG, "Initializing WIFI", ESP32::InitWIFI(SSID, PSWD));
 	//INIT_AND_CONTINUE(TAG, "Initializing NTP", ESP32::InitNTP());
 	INIT_AND_CONTINUE(TAG, "Initializing LVGL", LVGL::Init());
-
-
-	//spi_master_init();
-	//SetWritePinCallback(WrtPin);
-	//SetTransmitCallback(spi_master_write_byte);
-	//ST7735_Init();
-	//ST7735_FillScreen(0x00);
-	//ST7735_WriteString(0, 0, "Hello", Font_11x18, 0xFFFF, 0x0000);
-	
 	INIT_AND_CONTINUE(TAG, "Initializing SPI", spiBus.Init(HSPI_HOST, SPI_CLK_Pin, SPI_MOSI_Pin, SPI_MISO_Pin, GPIO_NUM_NC, GPIO_NUM_NC, SPI_DMA_CH_AUTO));
-	
-	st7735.settings.cs = DISPLAY_CS_Pin;
-	st7735.settings.dc = DISPLAY_DC_Pin;
-	st7735.settings.rst = DISPLAY_RES_Pin;
 	INIT_AND_CONTINUE(TAG, "Initializing st7735", st7735.Init(spiBus));
-	
+	INIT_AND_CONTINUE(TAG, "Initializing I2C", i2cBus.Init(I2C_NUM_0, I2C_SCL, I2C_SDA));
+	INIT_AND_CONTINUE(TAG, "Initializing ina3221", ina3221.Init(&i2cBus, INA3221_ADDR40_GND));
+
+	ina3221.setShuntRes(5, 5, 5);
+
 	DisplayST7735 display;
 	display.Init(&st7735);
 	
 	Screen screen;
 	screen.Init();
-	
-	Label label;
-	label.Init(screen);
-	
-	label.SetText("Test");
 
-	int y = 0;
-	int x = 0;
-	int dx = 2;
-	int dy = 1;
-	
+	Label labels[6];
+
+	for(int i=0; i<6; i++)
+	{
+		labels[i].Init(screen);
+		labels[i].SetPosition((i%2) * 64, (i/2) * 12);
+	}
+
+	while (true)
+	{
+		float current[3], voltage[3];
+		current[0] = ina3221.getCurrent(INA3221_CH1);
+		voltage[0] = ina3221.getVoltage(INA3221_CH1);
+		current[1] = ina3221.getCurrent(INA3221_CH2);
+		voltage[1] = ina3221.getVoltage(INA3221_CH2);
+		current[2] = ina3221.getCurrent(INA3221_CH3);
+		voltage[2] = ina3221.getVoltage(INA3221_CH3);
+
+		ESP_LOGI("MAIN", "%.2fV %.2fA   %.2fV %.2fA   %.2fV %.2fA", voltage[0], current[0], voltage[1], current[1], voltage[2], current[2]);
+		vTaskDelay(pdMS_TO_TICKS(250));
+	}	
+
 	while(1)
 	{
-		x += dx;
-		y += dy;
-		
-		if (x > 128 || x < 0)
-		{
-			dx = -dx;
-			x += dx;
-		}
-		
-		if (y > 128 || y < 0)
-		{
-			dy = -dy;
-			y += dy;
-		}
-		
-		
-		label.SetPosition(x, y);
-		
+		float current[3], voltage[3];
+		current[0] = ina3221.getCurrent(INA3221_CH1);
+		voltage[0] = ina3221.getVoltage(INA3221_CH1);
+		current[1] = ina3221.getCurrent(INA3221_CH2);
+		voltage[1] = ina3221.getVoltage(INA3221_CH2);
+		current[2] = ina3221.getCurrent(INA3221_CH3);
+		voltage[2] = ina3221.getVoltage(INA3221_CH3);
+
+
+
+		current[0] = 0.0f;
+        voltage[0] = 0.0f;
+        current[1] = 0.0f;
+        voltage[1] = 0.0f;
+        current[2] = 0.0f;
+        voltage[2] = 0.0f;
+
+
+		ESP_LOGI("MAIN", "%.2fV %.2fA   %.2fV %.2fA   %.2fV %.2fA", voltage[0], current[0], voltage[1], current[1], voltage[2], current[2]);
+
+		labels[0].SetText("%dmV", current[0]);
+		labels[1].SetText("%dmA", voltage[0]);
+		labels[2].SetText("%dmV", current[1]);
+		labels[3].SetText("%dmA", voltage[1]);
+		labels[4].SetText("%dmV", current[2]);
+		labels[5].SetText("%dmA", voltage[2]);
+
+
 
 		vTaskDelay(pdMS_TO_TICKS(20));
 	}
